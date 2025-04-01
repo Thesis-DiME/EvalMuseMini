@@ -1,6 +1,1 @@
-git lfs install
-git clone https://huggingface.co/datasets/DY-Evalab/EvalMuse
-cd EvalMuse
-cat images.zip.part-* > images.zip
-unzip -d ../ images.zip
-mv *.json ../datasets
+huggingface-cli download Dnau15/EvalMuseMini --repo-type dataset --local-dir ./data/dataset

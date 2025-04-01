@@ -1,3 +1,7 @@
+To download FULL dataset and unzip run ./scripts/download.sh
+To download only test.json dataset run ./scripts/download_test_dataset.sh
+To download model run ./scripts/download_model.sh
+
 <div align="center">
    <h1>EvalMuse-40K: A Reliable and Fine-Grained Benchmark with Comprehensive Human Annotations for Text-to-Image Generation Model Evaluation</h1>
    <i>How to evaluate Text to Image Generation Model properly?</i>
