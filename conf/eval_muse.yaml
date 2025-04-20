@@ -1,0 +1,14 @@
+metric:
+  _target_: metric.ElementAlignmentMetric
+  dataset_dir: /home/naumov/code/general-pipeline/data/generated_images/runwayml-stable-diffusion-v1-5/0/
+dataset:
+  _target_: main.HumanRatedImageDataset
+  metadata_path: /home/naumov/code/general-pipeline/data/datasets/genai_bench/metadata.json
+  folder_path: /home/naumov/code/general-pipeline/data/datasets/genai_bench/images
+  model_name: Midjourney_6
+model_path: /home/naumov/code/general-pipeline/submodules/EvalMuseMini/pretrained_models/fga_blip2.pth
+device: cuda
+csv_path: output.csv
+save_path: output.json
+batch_size: 4
+num_workers: 0
