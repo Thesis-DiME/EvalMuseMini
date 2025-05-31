@@ -32,8 +32,6 @@ def filter_unique_prompts(input_file, output_file):
 
         print(f"Filtered data saved to {output_file}")
 
-    except FileNotFoundError:
-        print(f"Error: The file '{input_file}' was not found.")
     except json.JSONDecodeError:
         print("Error: The input file is not a valid JSON.")
     except Exception as e:
@@ -41,8 +39,13 @@ def filter_unique_prompts(input_file, output_file):
 
 
 def main():
-    input_file = "./data/dataset/mini_test.json"
-    output_file = "./dataset/prompts.json"
+    import os
+    cwd = os.getcwd()
+    print(cwd)
+    input_file = "data/dataset/mini_test.json"
+    output_file = "data/dataset/prompts.json"
+    
+    input_file = os.path.join(cwd, input_file)
     filter_unique_prompts(input_file, output_file)
 
 
