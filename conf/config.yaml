@@ -1,0 +1,5 @@
+metric:
+  _target_: metric.ElementAlignmentMetric
+  dataset_dir: /home/naumov/code/general-pipeline/data/generated_images/stable-diffusion-v1-5-stable-diffusion-v1-5/3/
+metadata_path: /home/naumov/code/general-pipeline/data/generated_images/stable-diffusion-v1-5-stable-diffusion-v1-5/3/metadata.json
+model_path: /home/naumov/code/general-pipeline/submodules/EvalMuseMini/pretrained_models/fga_blip2.pth

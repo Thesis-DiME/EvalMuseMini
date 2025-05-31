@@ -3,173 +3,80 @@ import json
 from transformers import BertTokenizer
 from tqdm import tqdm
 from lavis.models import load_model_and_preprocess
-from PIL import Image
-import hydra
-from omegaconf import DictConfig
-import csv
-from torch.utils.data import DataLoader
 import os
-from torch.utils.data import Dataset, DataLoader
-from enum import Enum
+from PIL import Image
+from utils import load_data, get_index
+import hydra
+from omegaconf import DictConfig, OmegaConf
+import csv
+from pathlib import Path
+
+tokenizer = BertTokenizer.from_pretrained("bert-base-uncased", truncation_side="right")
+tokenizer.add_special_tokens({"bos_token": "[DEC]"})
 
 
-class ModelName(Enum):
-    DeepFloyd_I_XL_v1 = "DeepFloyd_I_XL_v1"
-    Midjourney_6 = "Midjourney_6"
-    DALLE_3 = "DALLE_3"
-    SDXL_Turbo = "SDXL_Turbo"
-    SDXL_Base = "SDXL_Base"
-    SDXL_2_1 = "SDXL_2_1"
+@hydra.main(config_path="conf", config_name="config")
+def eval(cfg: DictConfig):
+    device = torch.device(cfg.device)
 
+    data = load_data(cfg.metadata_file, "json")
 
-class HumanRatedImageDataset(Dataset):
-    def __init__(
-        self, metadata_path, folder_path, model_name: ModelName, transform=None
-    ):
-        self.folder_path = folder_path
-        self.model_name = model_name
-        self.transform = transform
+    model, vis_processors, text_processors = load_model_and_preprocess(
+        "fga_blip2", "coco", device=device, is_eval=True
+    )
+    model.load_checkpoint(cfg.model_path)
+    model.eval()
 
-        with open(metadata_path, "r") as f:
-            self.metadata = json.load(f)
+    result_list = []
+    for item in tqdm(data[: cfg.num_files]):
+        elements = item["element_score"].keys()
+        prompt = item["prompt"]
 
-    def __len__(self):
-        return len(self.metadata)
+        metadata_path = Path(cfg.metadata_path)
+        image_path = os.path.join(metadata_path.parent, item["img_path"])
+        image = Image.open(image_path).convert("RGB")
+        image = vis_processors["eval"](image).to(device)
 
-    def __getitem__(self, idx):
-        data = self.metadata[idx]
+        prompt = text_processors["eval"](prompt)
+        prompt_ids = tokenizer(prompt).input_ids
 
-        try:
-            # Convert model_name enum to string for dictionary lookup
-            relative_img_path = data["Images"][self.model_name.value]
-            full_img_path = os.path.join(self.folder_path, relative_img_path)
-            image = Image.open(full_img_path).convert("RGB")
-        except Exception as e:
-            raise RuntimeError(
-                f"Error loading image for model {self.model_name.value} at index {idx}: {e}"
-            )
+        torch.cuda.empty_cache()
 
-        if self.transform:
-            image = self.transform(image)
+        with torch.no_grad():
+            alignment_score, scores = model.element_score(image.unsqueeze(0), [prompt])
 
-        return {
-            "index": data["Index"],
-            "prompt": data["Prompt"],
-            "image_path": full_img_path,
-            "real_image": image,
-            "generated_image": image,  # if applicable, or can be removed
-            "human_ratings": data["HumanRatings"].get(self.model_name.value, []),
-        }
-    
-class EvalMusePipeline:
-    def __init__(self, cfg: DictConfig):
-        self.cfg = cfg
-        self.device = torch.device(cfg.device)
+        elements_score = {}
+        for element in elements:
+            element_ = element.rpartition("(")[0]
+            element_ids = tokenizer(element_).input_ids[1:-1]
 
-        self.tokenizer = BertTokenizer.from_pretrained("bert-base-uncased", truncation_side="right")
-        self.tokenizer.add_special_tokens({"bos_token": "[DEC]"})
+            idx = get_index(element_ids, prompt_ids)
 
-        # Load BLIP2 model and processors
-        self.model, self.vis_processors, self.text_processors = load_model_and_preprocess(
-            "fga_blip2", "coco", device=self.device, is_eval=True
+            if idx:
+                mask = [0] * len(prompt_ids)
+                mask[idx : idx + len(element_ids)] = [1] * len(element_ids)
+
+                mask = torch.tensor(mask).to(device)
+                elements_score[element] = ((scores * mask).sum() / mask.sum()).item()
+            else:
+                elements_score[element] = 0
+
+        item["score_result"] = alignment_score.item()
+        item["element_result"] = elements_score
+        result_list.append(item)
+
+    with open(cfg.save_path, "w", newline="", encoding="utf-8") as file:
+        json.dump(result_list, file, ensure_ascii=False, indent=4)
+
+    with open(
+        cfg.save_path.replace(".json", ".csv"), "w", newline="", encoding="utf-8"
+    ) as file:
+        writer = csv.DictWriter(
+            file, fieldnames=result_list[0].keys() if result_list else []
         )
-        self.model.load_checkpoint(cfg.model_path)
-        self.model.eval()
-
-        # Dataset and DataLoader
-        dataset_class = hydra.utils.get_class(cfg.dataset._target_)
-        model_name = ModelName[cfg.dataset.model_name]
-        transform = self.vis_processors["eval"]
-
-        dataset = dataset_class(
-            cfg.dataset.metadata_path,
-            folder_path=cfg.dataset.folder_path,
-            model_name=model_name,
-            transform=transform
-        )
-        self.dataloader = DataLoader(
-            dataset,
-            batch_size=cfg.batch_size,
-            shuffle=False,
-            num_workers=cfg.num_workers
-        )
-
-        # Metric instantiation
-        self.metric = hydra.utils.instantiate(
-            cfg.metric,
-            model=self.model,
-            vis_processors=self.vis_processors,
-            text_processors=self.text_processors,
-            tokenizer=self.tokenizer,
-            dataset_dir=cfg.metric.dataset_dir,
-        ).to(self.device)
-
-    def evaluate(self):
-        for batch in tqdm(self.dataloader):
-            prompts = batch["prompt"]
-            images = batch["image_path"]
-
-            for prompt, image in zip(prompts, images):
-                self.metric.update({
-                    "prompt": prompt,
-                    "image_path": image,
-                })
-
-        result_list = self.metric.compute()
-        self._save_results(result_list)
-        self._save_csv_results(result_list)
-
-    def _save_csv_results(self, result_list):
-        if not result_list:
-            return
-
-        flattened_results = []
-        for result in result_list:
-            flat_result = result.copy()
-            for key, value in result.items():
-                if isinstance(value, dict):
-                    flat_result[key] = json.dumps(value, ensure_ascii=False)
-            flattened_results.append(flat_result)
-
-        existing_data = []
-        file_exists = os.path.exists(self.cfg.csv_path)
-
-        if file_exists:
-            with open(self.cfg.csv_path, "r", encoding="utf-8") as f:
-                reader = csv.DictReader(f)
-                existing_data = list(reader)
-
-            if len(existing_data) != len(flattened_results):
-                raise ValueError(
-                    f"Cannot append columns: Existing file has {len(existing_data)} rows "
-                    f"but new data has {len(flattened_results)} rows"
-                )
-
-            for existing_row, new_row in zip(existing_data, flattened_results):
-                existing_row.update(new_row)
-
-            fieldnames = list(existing_data[0].keys()) if existing_data else []
-            new_columns = [col for col in flattened_results[0].keys() if col not in fieldnames]
-            fieldnames.extend(new_columns)
-        else:
-            existing_data = flattened_results
-            fieldnames = list(flattened_results[0].keys()) if flattened_results else []
-
-        with open(self.cfg.csv_path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(existing_data)
-
-    def _save_results(self, result_list):
-        with open(self.cfg.save_path, "w", encoding="utf-8") as f:
-            json.dump(result_list, f, ensure_ascii=False, indent=4)
-
-
-@hydra.main(config_path="conf", config_name="eval_muse")
-def main(cfg: DictConfig):
-    pipeline = EvalMusePipeline(cfg)
-    pipeline.evaluate()
+        writer.writeheader()
+        writer.writerows(result_list)
 
 
 if __name__ == "__main__":
-    main()
+    eval()
