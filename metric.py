@@ -37,7 +37,7 @@ class ElementAlignmentMetric(torchmetrics.Metric):
         
         prompt = item["prompt"]
 
-        image_path = os.path.join(self.dataset_dir, item["image_path"])
+        image_path = os.path.join(self.dataset_dir, item["img_path"])
         image = Image.open(image_path).convert("RGB")
         image = self.vis_processors["eval"](image).to(self.device)
 
