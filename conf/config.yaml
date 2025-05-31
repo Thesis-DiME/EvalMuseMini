@@ -1,5 +1,5 @@
 metric:
   _target_: metric.ElementAlignmentMetric
-metadata_path: /home/dmitrii/code/general-pipeline/submodules/EvalMuseMini/data/dataset/prompts.json
-model_path: /home/dmitrii/code/general-pipeline/submodules/EvalMuseMini/pretrained_models/fga_blip2.pth
+metadata_path: /app/data/generated_images/sd-legacy_stable-diffusion-v1-5/ivan_007/metadata.json
+model_path: /app/pretrained_models/fga_blip2.pth
 device: cpu

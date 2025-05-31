@@ -39,7 +39,7 @@ class EvalMusePipeline:
             vis_processors=self.vis_processors,
             text_processors=self.text_processors,
             tokenizer=self.tokenizer,
-            dataset_dir=dataset_dir / "images",
+            dataset_dir=dataset_dir,
         ).to(self.device)
 
         # Force results path to results/individual_metrics/eval_muse.csv
@@ -49,7 +49,7 @@ class EvalMusePipeline:
         self.output_csv_path.parent.mkdir(parents=True, exist_ok=True)
 
     def evaluate(self):
-        for item in tqdm(self.data[:5]):
+        for item in tqdm(self.data):
             self.metric.update(item)
 
         result_list = self.metric.compute()
