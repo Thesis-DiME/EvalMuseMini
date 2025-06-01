@@ -11,6 +11,6 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 COPY . .
 
-RUN chmod u+x scripts/preprocess.sh && ./scripts/preprocess.sh
+RUN chmod u+x scripts/preprocess.sh scripts/download.sh scripts/download_model.sh scripts/download_test_dataset.sh && ./scripts/preprocess.sh
 
 CMD [ "python", "main.py" ]
