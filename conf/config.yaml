@@ -1,5 +1,5 @@
 metric:
   _target_: metric.ElementAlignmentMetric
-metadata_path: /app/data/generated_images/stabilityai_stable-diffusion-xl-base-1.0/ivan_007/metadata.json
+metadata_path: /app/data/generated_images/kandinsky-community_kandinsky-2-2-decoder/ivan_007/metadata.json
 model_path: /app/pretrained_models/fga_blip2.pth
 device: cpu
